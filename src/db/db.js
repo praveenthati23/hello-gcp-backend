@@ -1,8 +1,9 @@
+// src/db.js
 const mysql = require('mysql2/promise');
 
 let pool;
 
-async function getPool() {
+function getPool() {
   if (!pool) {
     pool = mysql.createPool({
       host: process.env.DB_HOST,
@@ -18,5 +19,10 @@ async function getPool() {
   return pool;
 }
 
-module.exports = { getPool };
+module.exports = {
+  query: async (...args) => {
+    const pool = getPool();
+    return pool.query(...args);
+  }
+};
 
