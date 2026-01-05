@@ -1,0 +1,125 @@
+name: Cloud Run CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - main
+  pull_request:
+    branches:
+      - uat
+      - main
+
+
+env:
+  PROJECT_ID: still-primer-424112-t3
+  REGION: us-central1
+  WORKLOAD_IDENTITY_PROVIDER: projects/247494040824/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SERVICE_ACCOUNT: github-actions-sa@still-primer-424112-t3.iam.gserviceaccount.com
+
+jobs:
+
+  # -------------------------------
+  # DEV – AUTO DEPLOY
+  # -------------------------------
+  deploy-dev:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy DEV
+        run: |
+          gcloud run deploy hello-backend-dev \
+            --source . \
+            --region $REGION \
+            --allow-unauthenticated \
+            --quiet
+
+  # -------------------------------
+  # UAT – BLUE GREEN (MANUAL APPROVAL)
+  # -------------------------------
+  deploy-uat:
+    if: github.ref == 'refs/heads/uat'
+    runs-on: ubuntu-latest
+    environment: uat   # 👈 Manual approval REQUIRED
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy UAT (Green Revision)
+        run: |
+          gcloud run deploy hello-backend-uat \
+            --source . \
+            --region $REGION \
+            --no-traffic \
+            --quiet
+
+      - name: Switch Traffic to Green
+        run: |
+          gcloud run services update-traffic hello-backend-uat \
+            --region $REGION \
+            --to-latest
+
+  # -------------------------------
+  # PROD – CANARY (MANUAL APPROVAL)
+  # -------------------------------
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod   # 👈 Manual approval REQUIRED
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy PROD (New Revision)
+        run: |
+          gcloud run deploy hello-backend \
+            --source . \
+            --region $REGION \
+            --no-traffic \
+            --quiet
+
+      - name: Canary 10%
+        run: |
+          gcloud run services update-traffic hello-backend \
+            --region $REGION \
+            --to-latest=10
+
+      - name: Promote to 100%
+        run: |
+          gcloud run services update-traffic hello-backend \
+            --region $REGION \
+            --to-latest=100
