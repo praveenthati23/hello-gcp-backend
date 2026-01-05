@@ -2,9 +2,15 @@ name: Cloud Run CI/CD
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - dev
+      - uat
+      - main
   pull_request:
-    branches: [uat, main]
+    branches:
+      - uat
+      - main
+
 
 env:
   PROJECT_ID: still-primer-424112-t3
